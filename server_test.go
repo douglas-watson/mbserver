@@ -1,6 +1,7 @@
 package mbserver
 
 import (
+	"net"
 	"testing"
 	"time"
 
@@ -135,4 +136,51 @@ func TestModbus(t *testing.T) {
 	if !isEqual(expect, got) {
 		t.Errorf("expected %v, got %v", expect, got)
 	}
+}
+
+func TestModbusInvalidMessages(t *testing.T) {
+	// Server
+	s := NewServer()
+	err := s.ListenTCP("127.0.0.1:3334")
+	if err != nil {
+		t.Fatalf("failed to listen, got %v\n", err)
+	}
+	defer s.Close()
+
+	// Allow the server to start and to avoid a connection refused on the client
+	time.Sleep(1 * time.Millisecond)
+
+	// Connect a simple TCP client
+	client, err := net.Dial("tcp", "127.0.0.1:3334")
+	if err != nil {
+		t.Fatalf("failed to connect client, got %v\n", err)
+	}
+
+	readFirstReg := []byte{0, 1, 0, 0, 0, 6, 0, 3, 0, 0, 0, 1}
+	// readWayTooShort := []byte{0, 1, 0, 0}
+	readTooShort := []byte{0, 1, 0, 0, 0, 6, 0, 3, 0, 0, 0}
+
+	// Send a valid message & get response
+	_, err = client.Write(readFirstReg)
+	if err != nil {
+		t.Fatalf("failed to write message, got %v\n", err)
+	}
+	response := make([]byte, 256)
+	n, err := client.Read(response)
+	response = response[:n]
+	if err != nil {
+		t.Fatalf("failed to receive response, got %v, %v\n", err, response)
+	}
+
+	// Send and receive invalid message
+	_, err = client.Write(readTooShort)
+	if err != nil {
+		t.Fatalf("failed to write message, got %v\n", err)
+	}
+	n, err = client.Read(response)
+	response = response[:n]
+	if err != nil {
+		t.Fatalf("failed to receive response, got %v, %v\n", err, response)
+	}
+
 }
